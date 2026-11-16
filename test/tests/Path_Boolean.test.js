@@ -1334,6 +1334,136 @@ describe('Path Boolean Operations', () => {
     }
   })
 
+  test('Boolean operations with options.stroke', () => {
+    const box = new Path.Rectangle({
+      point: [0, 0],
+      size: [300, 300]
+    })
+    const circle = new Path.Circle({
+      center: [150, 150],
+      radius: 100,
+      strokeColor: 'black',
+      strokeWidth: 20,
+      fillColor: null
+    })
+    // The area of the circle's stroke band, between the radii 90 and 110:
+    const ringArea = circle.outline({ insert: false }).area
+
+    // The operands are not changed:
+    const boxPathData = box.pathData
+    const circlePathData = circle.pathData
+    const circleStrokeWidth = circle.strokeWidth
+
+    // The stroke band is subtracted from the box, not the fill of the circle:
+    const subtract = box.subtract(circle, { stroke: true })
+    equals(subtract.area, 90000 - ringArea)
+    equals(subtract.children.length, 3)
+    equals(
+      subtract.children.every(child => child.closed),
+      true
+    )
+
+    const intersect = box.intersect(circle, { stroke: true })
+    equals(intersect.area, ringArea)
+    equals(intersect.children.length, 2)
+    equals(
+      intersect.children.every(child => child.closed),
+      true
+    )
+
+    equals(box.unite(circle, { stroke: true }).area, 90000)
+    equals(box.exclude(circle, { stroke: true }).area, 90000 - ringArea)
+
+    // The operands keep their geometry and style:
+    equals(box.pathData, boxPathData)
+    equals(circle.pathData, circlePathData)
+    equals(circle.strokeWidth, circleStrokeWidth)
+
+    // Each operand in an array is stroked on its own:
+    const circle2 = new Path.Circle({
+      center: [150, 150],
+      radius: 30,
+      strokeColor: 'black',
+      strokeWidth: 10,
+      fillColor: null
+    })
+    const ringArea2 = circle2.outline({ insert: false }).area
+    equals(
+      box.subtract([circle, circle2], { stroke: true }).area,
+      90000 - ringArea - ringArea2
+    )
+
+    // trace: false keeps the first path and splits it along the stroke:
+    const line = new Path.Line([0, 150], [300, 150])
+    const division = line.divide(circle, { trace: false, stroke: true })
+    equals(division.children.length, 5)
+    equals(
+      division.children.every(child => !child.closed),
+      true
+    )
+
+    const remainder = line.subtract(circle, { trace: false, stroke: true })
+    equals(remainder.children.length, 3)
+    equals(
+      remainder.children.every(child => !child.closed),
+      true
+    )
+
+    // A stroke of zero width covers no area, and has a defined result:
+    circle.strokeWidth = 0
+    equals(box.subtract(circle, { stroke: true }).area, 90000)
+    equals(box.intersect(circle, { stroke: true }).area, 0)
+  })
+
+  test('Boolean operations with options.stroke honor caps, joins and dashes', () => {
+    const box = new Path.Rectangle([-50, -50], [200, 200])
+
+    function line(options) {
+      return new Path.Line({
+        from: [0, 0],
+        to: [100, 0],
+        strokeColor: 'black',
+        strokeWidth: 10,
+        fillColor: null,
+        ...options
+      })
+    }
+
+    // The ends of an open stroke are drawn with its caps:
+    equals(
+      box.intersect(line({ strokeCap: 'butt' }), { stroke: true }).area,
+      1000
+    )
+    equals(
+      box.intersect(line({ strokeCap: 'square' }), { stroke: true }).area,
+      1100
+    )
+    equals(
+      box.intersect(line({ strokeCap: 'round' }), { stroke: true }).area,
+      1000 + 25 * Math.PI,
+      null,
+      { tolerance: 0.1 }
+    )
+
+    // Dashed strokes are outlined as their dashes:
+    equals(
+      box.intersect(line({ dashArray: [10, 10] }), { stroke: true }).area,
+      500
+    )
+
+    // The corners of a stroke are drawn with its joins:
+    const corner = new Path({
+      segments: [[0, 0], [100, 0], [100, 100]],
+      strokeColor: 'black',
+      strokeWidth: 10,
+      fillColor: null,
+      strokeJoin: 'miter'
+    })
+    equals(box.intersect(corner, { stroke: true }).area, 2000)
+    corner.strokeJoin = 'bevel'
+    equals(box.intersect(corner, { stroke: true }).area, 1987.5)
+  })
+
   test('#1239 / #1073', () => {
     const p1 = new Path([
       [890.91, 7.52, 0, 0, 85.40999999999997, 94.02],

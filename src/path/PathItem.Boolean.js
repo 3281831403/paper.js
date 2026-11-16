@@ -53,6 +53,40 @@ PathItem.inject(
     }
 
     /*
+     * The stroke of the path item, as the area that its stroke covers, with
+     * its width, caps, joins, miter limit and dashes, and with its matrix
+     * applied, as #outline() returns it.
+     */
+    function getStrokeRegion(path) {
+      const width = path.getStrokeWidth()
+      // A stroke of zero or negative width covers no area:
+      if (width <= 0) return new Path(Item.NO_INSERT)
+      // Outline a clone, so that the operand itself is left unchanged:
+      return path.clone({ insert: false }).outline({
+        insert: false,
+        width: width,
+        join: path.getStrokeJoin(),
+        cap: path.getStrokeCap(),
+        miterLimit: path.getMiterLimit()
+      })
+    }
+
+    /*
+     * The stroke regions of the other operand, or of each of the operands in
+     * the other operand's array, each stroked on its own and not merged first.
+     */
+    function getStrokeOperands(path) {
+      if (!path) return null
+      if (Array.isArray(path)) {
+        const operands = []
+        for (let i = 0, l = path.length; i < l; i++)
+          operands.push(getStrokeRegion(path[i]))
+        return operands
+      }
+      return getStrokeRegion(path)
+    }
+
+    /*
      * Creates a clone of the path that we can modify freely, with its matrix
      * applied to its geometry. Calls #reduce() to simplify compound paths and
      * remove empty curves, and closes open paths if required.
@@ -124,23 +158,33 @@ PathItem.inject(
     }
 
     function traceBoolean(path1, path2, operation, options) {
-      // Only support subtract and intersect operations when computing stroke
-      // based boolean operations (options.split = true).
+      // Without tracing, the first path is only split at the intersections
+      // with the other paths, see splitBoolean():
       if (
         options &&
-        (options.trace == false || options.stroke) &&
+        options.trace == false &&
         /^(subtract|intersect)$/.test(operation)
       )
         return splitBoolean(path1, path2, operation, options)
+      // With options.stroke, the other operands are their stroke regions. The
+      // original path2 is kept for the insertion of the result below:
+      const operands =
+        options && options.stroke
+          ? getStrokeOperands(path2)
+          : path2
       // We do not modify the operands themselves, but trace copies of them.
       // NOTE: The result paths might not belong to the same type i.e.
       // subtract(A:Path, B:Path):CompoundPath etc.
       let paths
-      if (operation === 'exclude' && Array.isArray(path2) && path2.length > 1) {
+      if (
+        operation === 'exclude' &&
+        Array.isArray(operands) &&
+        operands.length > 1
+      ) {
         // Resolved on its own, each path fills where its winding is odd.
         // So together, they fill where an odd number of them do, as one
         // compound path with the even-odd rule:
-        const items = [path1].concat(path2)
+        const items = [path1].concat(operands)
         const compound = new CompoundPath(Item.NO_INSERT)
         compound.setFillRule('evenodd')
         for (let i = 0, l = items.length; i < l; i++) {
@@ -151,7 +195,7 @@ PathItem.inject(
         paths = tracePaths([compound], operators.unite)
       } else {
         paths = tracePaths(
-          getOperands(path1, combinePaths(path2, operation)),
+          getOperands(path1, combinePaths(operands, operation)),
           operators[operation]
         )
       }
@@ -201,8 +245,16 @@ PathItem.inject(
       let i
       let l
 
+      // With options.stroke, split along the boundaries of the other
+      // operands' stroke regions. The original path2 is kept for the
+      // insertion of the result below:
+      const operands =
+        options && options.stroke
+          ? getStrokeOperands(path2)
+          : path2
+
       const _path1 = preparePath(path1)
-      const _path2 = preparePath(combinePaths(path2, operation))
+      const _path2 = preparePath(combinePaths(operands, operation))
       const crossings = _path1.getIntersections(_path2, filterIntersection)
       const subtract = operation === 'subtract'
       const divide = operation === 'divide'
@@ -1628,6 +1680,11 @@ PathItem.inject(
        * @option [options.insert=true] {Boolean} whether the resulting item
        *     should be inserted back into the scene graph, above all paths
        *     involved in the operation
+       * @option [options.stroke=false] {Boolean} whether the operation uses
+       *     the areas that the strokes of the other paths cover, with their
+       *     width, caps, joins, miter limits and dashes, instead of the areas
+       *     that they fill. With an array of paths, each path is stroked on
+       *     its own.
        *
        * @param {PathItem|PathItem[]} path the path or paths to unite with
        * @param {Object} [options] the boolean operation options
@@ -1660,6 +1717,11 @@ PathItem.inject(
        * @option [options.insert=true] {Boolean} whether the resulting item
        *     should be inserted back into the scene graph, above all paths
        *     involved in the operation
+       * @option [options.stroke=false] {Boolean} whether the operation uses
+       *     the areas that the strokes of the other paths cover, with their
+       *     width, caps, joins, miter limits and dashes, instead of the areas
+       *     that they fill. With an array of paths, each path is stroked on
+       *     its own.
        * @option [options.trace=true] {Boolean} whether the tracing method is
        *     used, treating all paths as areas when determining which parts
        *     of the paths are to be kept in the result, or whether the first
@@ -1689,6 +1751,11 @@ PathItem.inject(
        * @option [options.insert=true] {Boolean} whether the resulting item
        *     should be inserted back into the scene graph, above all paths
        *     involved in the operation
+       * @option [options.stroke=false] {Boolean} whether the operation uses
+       *     the areas that the strokes of the other paths cover, with their
+       *     width, caps, joins, miter limits and dashes, instead of the areas
+       *     that they fill. With an array of paths, each path is stroked on
+       *     its own.
        * @option [options.trace=true] {Boolean} whether the tracing method is
        *     used, treating all paths as areas when determining which parts
        *     of the paths are to be kept in the result, or whether the first
@@ -1717,6 +1784,11 @@ PathItem.inject(
        * @option [options.insert=true] {Boolean} whether the resulting item
        *     should be inserted back into the scene graph, above all paths
        *     involved in the operation
+       * @option [options.stroke=false] {Boolean} whether the operation uses
+       *     the areas that the strokes of the other paths cover, with their
+       *     width, caps, joins, miter limits and dashes, instead of the areas
+       *     that they fill. With an array of paths, each path is stroked on
+       *     its own.
        *
        * @param {PathItem|PathItem[]} path the path or paths to exclude the
        *     intersection of
@@ -1741,6 +1813,10 @@ PathItem.inject(
        * @option [options.insert=true] {Boolean} whether the resulting item
        *     should be inserted back into the scene graph, above both paths
        *     involved in the operation
+       * @option [options.stroke=false] {Boolean} whether the operation uses
+       *     the area that the stroke of the other path covers, with its
+       *     width, caps, joins, miter limit and dashes, instead of the area
+       *     that it fills.
        * @option [options.trace=true] {Boolean} whether the tracing method is
        *     used, treating both paths as areas when determining which parts
        *     of the paths are to be kept in the result, or whether the first
@@ -1751,7 +1827,7 @@ PathItem.inject(
        * @return {PathItem} the resulting path item
        */
       divide: function (path, options) {
-        return options && (options.trace == false || options.stroke)
+        return options && options.trace == false
           ? splitBoolean(this, path, 'divide', options)
           : createResult(
               [
