@@ -321,7 +321,7 @@ PathItem.inject(
         )
         // Now sort the paths by their areas, from large to small.
         const sorted = paths.slice().sort(function (a, b) {
-          return abs(b.getArea()) - abs(a.getArea())
+          return abs(b._getArea()) - abs(a._getArea())
         })
         // Get reference to the first, largest path and insert it
         // already.
@@ -1579,7 +1579,7 @@ PathItem.inject(
           path.setSegments(segments)
           path.setClosed(true)
           // Only add paths that cover an area to the result.
-          if (path.getArea() !== 0) paths.push(path)
+          if (path._getArea() !== 0) paths.push(path)
         }
       }
       return paths
@@ -1615,6 +1615,26 @@ PathItem.inject(
        */
       _getWinding: function (point) {
         return getWinding(point, this.getCurves())
+      },
+
+      /**
+       * The area that this path item actually fills, according to its fill
+       * rule, without modifying it. Open sub-paths are closed as filling
+       * them does, and the areas of the faces of the item's graph that the
+       * fill rule covers are added up.
+       *
+       * @return {Number} the filled area
+       */
+      _getFilledArea: function () {
+        const item = closePaths(this.clone(false))
+        const faces = createGraph([item]).faces
+        const nonZero = item.getFillRule() === 'nonzero'
+        let area = 0
+        for (let i = 0, l = faces.length; i < l; i++) {
+          const winding = faces[i].windings[0]
+          if (nonZero ? !!winding : !!(winding & 1)) area += faces[i].area
+        }
+        return area
       },
 
       /**

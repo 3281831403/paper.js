@@ -65,7 +65,7 @@ PathItem.inject(
       // outline, within rounding, are thick:
       function isThin(part) {
         const half = tolerance / 2
-        if (abs(part.getArea()) > half * part.getLength()) return false
+        if (abs(part._getArea()) > half * part.getLength()) return false
         const curves = part.getCurves()
         for (let i = 0, l = curves.length; i < l; i++) {
           const curve = curves[i]

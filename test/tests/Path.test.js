@@ -22,7 +22,13 @@ import paper, {
   Segment,
   Size
 } from 'paper'
-import { equals, ok, test } from '../helpers.js'
+import {
+  equals,
+  ok,
+  sampleArea,
+  sampleAreaTolerance,
+  test
+} from '../helpers.js'
 
 describe('Path', () => {
   test('Path#length', () => {
@@ -57,6 +63,24 @@ describe('Path', () => {
     })
 
     equals(() => circle.area, Math.PI * 100, null, { tolerance: 0.1 })
+  })
+
+  test('Path#area of self-intersecting paths', () => {
+    // The two triangles cancel each other out in the net area, but both are
+    // filled, so their area is counted instead of the net area:
+    const bowtie = new Path({
+      segments: [[0, 0], [100, 0], [0, 100], [100, 100]],
+      closed: true
+    })
+    equals(() => bowtie.area, 5000)
+    // Switching the fill rule takes effect immediately, and both rules fill
+    // the same area here:
+    bowtie.fillRule = 'evenodd'
+    equals(() => bowtie.area, 5000)
+    // Cross-check against a fixed grid of points:
+    equals(sampleArea(bowtie), bowtie.area, 'sampled area', {
+      tolerance: sampleAreaTolerance(bowtie)
+    })
   })
 
   test('Path#equals(path)', () => {

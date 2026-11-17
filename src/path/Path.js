@@ -169,7 +169,7 @@ const Path = PathItem.extend(
     _changed: function _changed(flags) {
       _changed.base.call(this, flags)
       if (flags & /*#=*/ ChangeFlag.GEOMETRY) {
-        this._length = this._area = undefined
+        this._length = this._area = this._selfIntersects = undefined
         if (flags & /*#=*/ ChangeFlag.SEGMENTS) {
           this._version++ // See CurveLocation
         } else if (this._curves) {
@@ -993,13 +993,11 @@ const Path = PathItem.extend(
     },
 
     /**
-     * The area that the path's geometry is covering. Self-intersecting paths
-     * can contain sub-areas that cancel each other out.
-     *
-     * @bean
-     * @type Number
+     * The net area of the path, as the sum of the signed areas of its
+     * curves. Self-intersecting paths can contain sub-areas that cancel
+     * each other out. This is the value that {@link #isClockwise} reads.
      */
-    getArea: function () {
+    _getArea: function () {
       let area = this._area
       if (area == null) {
         const segments = this._segments
@@ -1019,6 +1017,38 @@ const Path = PathItem.extend(
         this._area = area
       }
       return area
+    },
+
+    /**
+     * The area that the path's geometry is covering. Self-intersecting paths
+     * can contain sub-areas that cancel each other out in their net area, so
+     * their area is calculated from the region that they actually fill,
+     * according to their fill rule. The value keeps the sign of the net area.
+     *
+     * @bean
+     * @type Number
+     */
+    getArea: function () {
+      const area = this._getArea()
+      // A closed path that doesn't self-intersect fills exactly its net
+      // area, so keep the existing value for it.
+      if (this._closed && !this._getSelfIntersects()) return area
+      const filled = this._getFilledArea()
+      const epsilon = /*#=*/ Numerical.GEOMETRIC_EPSILON
+      const tolerance = epsilon * Math.max(1, Math.abs(area), filled)
+      return Math.abs(Math.abs(area) - filled) <= tolerance
+        ? area
+        : area < 0
+          ? -filled
+          : filled
+    },
+
+    // Whether the path intersects itself, which makes its filled area
+    // differ from its net area.
+    _getSelfIntersects: function () {
+      if (this._selfIntersects == null)
+        this._selfIntersects = this.getIntersections().length > 0
+      return this._selfIntersects
     },
 
     /**

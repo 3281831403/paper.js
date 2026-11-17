@@ -20,6 +20,7 @@ const {
   Group,
   Item,
   PathItem,
+  Point,
   Project,
   Raster,
   Shape,
@@ -127,6 +128,30 @@ export function test(name, run) {
       View._resetState()
     }
   })
+}
+
+// Estimates the area that a path fills by sampling a fixed grid of points,
+// to cross-check PathItem#area independently of how it is calculated. The
+// points are the centers of the grid cells, so aligned edges don't count
+// toward the boundary error.
+export function sampleArea(path, divisions) {
+  divisions = divisions || 400
+  const bounds = path.bounds
+  const step = Math.min(bounds.width, bounds.height) / divisions
+  let count = 0
+  for (let x = bounds.left + step / 2; x < bounds.right; x += step)
+    for (let y = bounds.top + step / 2; y < bounds.bottom; y += step)
+      if (path.contains(new Point(x, y))) count++
+  return count * step * step
+}
+
+// The tolerance of the grid-sampling estimate above, as the boundary error
+// that the cell centers can make, up to one cell per unit of the path's
+// length:
+export function sampleAreaTolerance(path, divisions) {
+  divisions = divisions || 400
+  const bounds = path.bounds
+  return path.length * Math.min(bounds.width, bounds.height) / divisions
 }
 
 // Compares actual with expected by the type of expected. Functions as actual

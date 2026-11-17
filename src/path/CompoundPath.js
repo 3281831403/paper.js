@@ -251,20 +251,38 @@ const CompoundPath = PathItem.extend(
     },
 
     /**
-     * The area that the compound-path's geometry is covering, calculated by
-     * getting the {@link Path#area} of each sub-path and it adding up.
-     * Note that self-intersecting paths and sub-paths of different orientation
-     * can result in areas that cancel each other out.
+     * The net area of the compound-path, as the sum of the signed
+     * {@link Path#area} of each sub-path. Sub-paths of different orientation
+     * can result in areas that cancel each other out. This is the value that
+     * {@link #isClockwise} reads.
+     */
+    _getArea: function () {
+      const children = this._children
+      let area = 0
+      for (let i = 0, l = children.length; i < l; i++)
+        area += children[i]._getArea()
+      return area
+    },
+
+    /**
+     * The area that the compound-path's geometry is covering, calculated from
+     * the region that its sub-paths actually fill, according to their fill
+     * rule. Sub-paths that overlap or that are nested in the same orientation
+     * are counted once. The value keeps the sign of the net area.
      *
      * @bean
      * @type Number
      */
     getArea: function () {
-      const children = this._children
-      let area = 0
-      for (let i = 0, l = children.length; i < l; i++)
-        area += children[i].getArea()
-      return area
+      const area = this._getArea()
+      const filled = this._getFilledArea()
+      const epsilon = /*#=*/ Numerical.GEOMETRIC_EPSILON
+      const tolerance = epsilon * Math.max(1, Math.abs(area), filled)
+      return Math.abs(Math.abs(area) - filled) <= tolerance
+        ? area
+        : area < 0
+          ? -filled
+          : filled
     },
 
     /**

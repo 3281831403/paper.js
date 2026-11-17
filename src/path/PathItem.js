@@ -124,7 +124,7 @@ const PathItem = Item.extend(
      * @see CompoundPath#area
      */
     isClockwise: function () {
-      return this.getArea() >= 0
+      return this._getArea() >= 0
     },
 
     setClockwise: function (clockwise) {

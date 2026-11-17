@@ -12,7 +12,7 @@
 
 import { describe, expect } from 'vitest'
 import { Color, CompoundPath, Path, Point, Rectangle } from 'paper'
-import { equals, test } from '../helpers.js'
+import { equals, sampleArea, sampleAreaTolerance, test } from '../helpers.js'
 
 describe('Compound Path', () => {
   test('CompoundPath#simplify() without children', () => {
@@ -47,6 +47,41 @@ describe('Compound Path', () => {
     path.fillColor = 'black'
 
     equals(() => path.children.length, 2)
+  })
+
+  test('CompoundPath#area follows the fill rule', () => {
+    // Two overlapping squares: with the nonzero rule the overlap is only
+    // counted once, and with the evenodd rule it is left out altogether:
+    const compound = new CompoundPath({
+      children: [
+        new Path.Rectangle([0, 0], [100, 100]),
+        new Path.Rectangle([50, 50], [100, 100])
+      ]
+    })
+    equals(() => compound.area, 17500)
+    compound.fillRule = 'evenodd'
+    equals(() => compound.area, 15000)
+    compound.fillRule = 'nonzero'
+    equals(() => compound.area, 17500)
+    equals(sampleArea(compound), compound.area, 'sampled area', {
+      tolerance: sampleAreaTolerance(compound)
+    })
+
+    // Same-direction nested circles with the evenodd rule leave a hole:
+    const rings = new CompoundPath({
+      children: [
+        new Path.Circle({ center: [0, 0], radius: 100 }),
+        new Path.Circle({ center: [0, 0], radius: 50 })
+      ]
+    })
+    rings.fillRule = 'evenodd'
+    equals(
+      () => rings.area,
+      rings.children[0].area - rings.children[1].area
+    )
+    equals(sampleArea(rings), rings.area, 'sampled area', {
+      tolerance: sampleAreaTolerance(rings)
+    })
   })
 
   test('CompoundPath#reduce() with a single child keeps its attributes', () => {
